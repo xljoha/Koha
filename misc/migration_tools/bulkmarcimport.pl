@@ -417,7 +417,7 @@ RECORD: while (  ) {
 			}
 					# create biblio, unless we already have it ( either match or isbn )
             if ($biblionumber) {
-                eval{$biblioitemnumber=GetBiblioData($biblionumber)->{biblioitemnumber};};
+                eval { ( $biblionumber, $biblioitemnumber ) = ModBiblio( $record, $biblionumber, GetFrameworkCode($biblionumber), { source => 'bulkmarcimport' }) };
                 if ($update) {
                     eval { ( $biblionumber, $biblioitemnumber ) = ModBiblio( $record, $biblionumber, GetFrameworkCode($biblionumber) ) };
                     if ($@) {
@@ -805,4 +805,3 @@ from the migration_tools directory.
 =back
 
 =cut
-

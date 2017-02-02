@@ -856,6 +856,10 @@ our $PERL_DEPS = {
         'usage'    => 'Interface third party systems',
         'required' => '0',
         'min_ver'  => '0.07',
+    'String::Similarity' => {
+        usage => 'cataloguing',
+        required => 1,
+        min_version => '1.04',
     },
 };
 
