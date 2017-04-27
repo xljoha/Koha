@@ -14,6 +14,11 @@ OPAC:
                   no: "Disable"
             -  the simple form of messaging options. This will enable the user to set sms, email or sms and email for all different events in one go.
         -
+            - pref: enableCoverImagesInOpacList
+              choices:
+                  yes: Enable
+                  no: Disable
+            - "Show syndetics cover images in OPAC"
         -
             - For search results in the OPAC, show the item's
             - pref: OPACResultsLibrary
@@ -279,7 +284,7 @@ OPAC:
               class: code
         -
             - pref: OpacAddMastheadLibraryPulldown
-              choices: 
+              choices:
                   yes: Add
                   no: "Don't add"
             - a library select pulldown menu on the OPAC masthead.
@@ -554,7 +559,7 @@ OPAC:
                   no: "Don't allow"
             - patrons to renew their own books on the OPAC.
         -
-            - Use 
+            - Use
             - pref: OpacRenewalBranch
               choices:
                   itemhomebranch: "the item's home library"
@@ -723,7 +728,7 @@ OPAC:
               choices:
                   yes: Use
                   no: "Don't use"
-            - "the item collection code when finding items for the shelf browser."      
+            - "the item collection code when finding items for the shelf browser."
 
     Self Registration:
         -
