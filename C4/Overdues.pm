@@ -638,7 +638,7 @@ Looks up a patron by borrower number.
 C<$borrower> is a reference-to-hash whose keys are all of the fields
 from the borrowers and categories tables of the Koha database. Thus,
 C<$borrower> contains all information about both the borrower and
-category he or she belongs to.
+category they belong to.
 
 =cut
 
@@ -994,6 +994,8 @@ sub parse_overdues_letter {
         return unless ( exists $params->{$required} && $params->{$required} );
     }
 
+    my $patron = Koha::Patrons->find( $params->{borrowernumber} );
+
     my $substitute = $params->{'substitute'} || {};
     $substitute->{today} ||= output_pref( { dt => dt_from_string, dateonly => 1} );
 
@@ -1028,6 +1030,7 @@ sub parse_overdues_letter {
         module => 'circulation',
         letter_code => $params->{'letter_code'},
         branchcode => $params->{'branchcode'},
+        lang => $patron->lang,
         tables => \%tables,
         substitute => $substitute,
         repeat => { item => \@item_tables },

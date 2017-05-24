@@ -63,7 +63,7 @@ The functions in this module deal with the aqorders in OPAC and in librarian int
 
 A suggestion is done in the OPAC. It has the status "ASKED"
 
-When a librarian manages the suggestion, he can set the status to "REJECTED" or "ACCEPTED".
+When a librarian manages the suggestion, they can set the status to "REJECTED" or "ACCEPTED".
 
 When the book is ordered, the suggestion status becomes "ORDERED"
 
@@ -502,11 +502,13 @@ sub ModSuggestion {
 
         # fetch the entire updated suggestion so that we can populate the letter
         my $full_suggestion = GetSuggestion( $suggestion->{suggestionid} );
+        my $patron = Koha::Patrons->find( $full_suggestion->{suggestedby} );
         if (
             my $letter = C4::Letters::GetPreparedLetter(
                 module      => 'suggestions',
                 letter_code => $full_suggestion->{STATUS},
                 branchcode  => $full_suggestion->{branchcode},
+                lang        => $patron->lang,
                 tables      => {
                     'branches'    => $full_suggestion->{branchcode},
                     'borrowers'   => $full_suggestion->{suggestedby},
@@ -554,7 +556,7 @@ sub ConnectSuggestionAndBiblio {
 
 &DelSuggestion($borrowernumber,$ordernumber)
 
-Delete a suggestion. A borrower can delete a suggestion only if he is its owner.
+Delete a suggestion. A borrower can delete a suggestion only if they are its owner.
 
 =cut
 

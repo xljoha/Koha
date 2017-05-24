@@ -2220,7 +2220,7 @@ C<$datedue> date due DateTime object
 C<$return_date> DateTime object representing the return time
 
 Internal function, called only by AddReturn that calculates and updates
- the user fine days, and debars him if necessary.
+ the user fine days, and debars them if necessary.
 
 Should only be called for overdue returns
 
@@ -2753,19 +2753,34 @@ sub CanBookBeRenewed {
         return ( 0, 'overdue');
     }
 
-    if ( $itemissue->{auto_renew}
-        and defined $issuing_rule->no_auto_renewal_after
+    if ( $itemissue->{auto_renew} ) {
+        if ( defined $issuing_rule->no_auto_renewal_after
                 and $issuing_rule->no_auto_renewal_after ne "" ) {
+            # Get issue_date and add no_auto_renewal_after
+            # If this is greater than today, it's too late for renewal.
+            my $maximum_renewal_date = dt_from_string($itemissue->{issuedate});
+            $maximum_renewal_date->add(
+                $issuing_rule->lengthunit => $issuing_rule->no_auto_renewal_after
+            );
+            my $now = dt_from_string;
+            if ( $now >= $maximum_renewal_date ) {
+                return ( 0, "auto_too_late" );
+            }
+        }
+        if ( defined $issuing_rule->no_auto_renewal_after_hard_limit
+                      and $issuing_rule->no_auto_renewal_after_hard_limit ne "" ) {
+            # If no_auto_renewal_after_hard_limit is >= today, it's also too late for renewal
+            if ( dt_from_string >= dt_from_string( $issuing_rule->no_auto_renewal_after_hard_limit ) ) {
+                return ( 0, "auto_too_late" );
+            }
+        }
 
-        # Get issue_date and add no_auto_renewal_after
-        # If this is greater than today, it's too late for renewal.
-        my $maximum_renewal_date = dt_from_string($itemissue->{issuedate});
-        $maximum_renewal_date->add(
-            $issuing_rule->lengthunit => $issuing_rule->no_auto_renewal_after
-        );
-        my $now = dt_from_string;
-        if ( $now >= $maximum_renewal_date ) {
-            return ( 0, "auto_too_late" );
+        if ( C4::Context->preference('OPACFineNoRenewalsBlockAutoRenew') ) {
+            my $fine_no_renewals = C4::Context->preference("OPACFineNoRenewals");
+            my ( $amountoutstanding ) = C4::Members::GetMemberAccountRecords($borrower->{borrowernumber});
+            if ( $amountoutstanding and $amountoutstanding > $fine_no_renewals ) {
+                return ( 0, "auto_too_much_oweing" );
+            }
         }
     }
 
@@ -3069,8 +3084,8 @@ has the item on loan.
 C<$itemnumber> is the number of the item to renew.
 
 C<$GetLatestAutoRenewDate> returns the DateTime of the latest possible
-auto renew date, based on the value "No auto renewal after" of the applicable
-issuing rule.
+auto renew date, based on the value "No auto renewal after" and the "No auto
+renewal after (hard limit) of the applicable issuing rule.
 Returns undef if there is no date specify in the circ rules or if the patron, loan,
 or item cannot be found.
 
@@ -3097,14 +3112,24 @@ sub GetLatestAutoRenewDate {
     );
 
     return unless $issuing_rule;
-    return if not $issuing_rule->no_auto_renewal_after
-               or $issuing_rule->no_auto_renewal_after eq '';
+    return
+      if ( not $issuing_rule->no_auto_renewal_after
+            or $issuing_rule->no_auto_renewal_after eq '' )
+      and ( not $issuing_rule->no_auto_renewal_after_hard_limit
+             or $issuing_rule->no_auto_renewal_after_hard_limit eq '' );
 
-    my $maximum_renewal_date = dt_from_string($itemissue->{issuedate});
-    $maximum_renewal_date->add(
-        $issuing_rule->lengthunit => $issuing_rule->no_auto_renewal_after
-    );
+    my $maximum_renewal_date;
+    if ( $issuing_rule->no_auto_renewal_after ) {
+        $maximum_renewal_date = dt_from_string($itemissue->{issuedate});
+        $maximum_renewal_date->add(
+            $issuing_rule->lengthunit => $issuing_rule->no_auto_renewal_after
+        );
+    }
 
+    if ( $issuing_rule->no_auto_renewal_after_hard_limit ) {
+        my $dt = dt_from_string( $issuing_rule->no_auto_renewal_after_hard_limit );
+        $maximum_renewal_date = $dt if not $maximum_renewal_date or $maximum_renewal_date > $dt;
+    }
     return $maximum_renewal_date;
 }
 
@@ -3359,12 +3384,20 @@ sub SendCirculationAlert {
 
     my $schema = Koha::Database->new->schema;
     my @transports = keys %{ $borrower_preferences->{transports} };
+
+    # From the MySQL doc:
+    # LOCK TABLES is not transaction-safe and implicitly commits any active transaction before attempting to lock the tables.
+    # If the LOCK/UNLOCK statements are executed from tests, the current transaction will be committed.
+    # To avoid that we need to guess if this code is execute from tests or not (yes it is a bit hacky)
+    my $do_not_lock = ( exists $ENV{_} && $ENV{_} =~ m|prove| ) || $ENV{KOHA_NO_TABLE_LOCKS};
+
     for my $mtt (@transports) {
         my $letter =  C4::Letters::GetPreparedLetter (
             module => 'circulation',
             letter_code => $type,
             branchcode => $branch,
             message_transport_type => $mtt,
+            lang => $borrower->{lang},
             tables => {
                 $issues_table => $item->{itemnumber},
                 'items'       => $item->{itemnumber},
@@ -3376,17 +3409,17 @@ sub SendCirculationAlert {
         ) or next;
 
         $schema->storage->txn_begin;
-        C4::Context->dbh->do(q|LOCK TABLE message_queue READ|);
-        C4::Context->dbh->do(q|LOCK TABLE message_queue WRITE|);
+        C4::Context->dbh->do(q|LOCK TABLE message_queue READ|) unless $do_not_lock;
+        C4::Context->dbh->do(q|LOCK TABLE message_queue WRITE|) unless $do_not_lock;
         my $message = C4::Message->find_last_message($borrower, $type, $mtt);
         unless ( $message ) {
-            C4::Context->dbh->do(q|UNLOCK TABLES|);
+            C4::Context->dbh->do(q|UNLOCK TABLES|) unless $do_not_lock;
             C4::Message->enqueue($letter, $borrower, $mtt);
         } else {
             $message->append($letter);
             $message->update;
         }
-        C4::Context->dbh->do(q|UNLOCK TABLES|);
+        C4::Context->dbh->do(q|UNLOCK TABLES|) unless $do_not_lock;
         $schema->storage->txn_commit;
     }
 
@@ -3853,7 +3886,7 @@ sub IsItemIssued {
   my ($ageRestriction, $daysToAgeRestriction) = GetAgeRestriction($record_restrictions, $borrower);
   my ($ageRestriction, $daysToAgeRestriction) = GetAgeRestriction($record_restrictions);
 
-  if($daysToAgeRestriction <= 0) { #Borrower is allowed to access this material, as he is older or as old as the agerestriction }
+  if($daysToAgeRestriction <= 0) { #Borrower is allowed to access this material, as they are older or as old as the agerestriction }
   if($daysToAgeRestriction > 0) { #Borrower is this many days from meeting the agerestriction }
 
 @PARAM1 the koha.biblioitems.agerestriction value, like K18, PEGI 13, ...

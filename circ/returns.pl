@@ -92,7 +92,7 @@ my $printer = $userenv->{'branchprinter'} // '';
 my $forgivemanualholdsexpire = $query->param('forgivemanualholdsexpire');
 
 my $overduecharges = (C4::Context->preference('finesMode') && C4::Context->preference('finesMode') ne 'off');
-#
+ #
 # Some code to handle the error if there is no branch or printer setting.....
 #
 
@@ -282,7 +282,9 @@ if ($barcode) {
 
     my $materials = $biblio->{'materials'};
     my $descriptions = Koha::AuthorisedValues->get_description_by_koha_field({frameworkcode => '', kohafield =>'items.materials', authorised_value => $materials });
-    $materials = $descriptions->{lib} // '';
+    $materials = $descriptions->{lib} // $materials;
+
+    my $issue = Koha::Checkouts->find( { itemnumber => $itemnumber } );
 
     $template->param(
         title            => $biblio->{'title'},
@@ -297,6 +299,7 @@ if ($barcode) {
         biblionumber     => $biblio->{'biblionumber'},
         borrower         => $borrower,
         additional_materials => $materials,
+        issue            => $issue,
     );
 
     my %input = (
@@ -413,11 +416,14 @@ if ( $messages->{'WrongTransfer'} and not $messages->{'WasTransfered'}) {
             wbortitle       => $borr->{'title'},
             wborphone       => $borr->{'phone'},
             wboremail       => $borr->{'email'},
-            wborstnum       => $borr->{streetnumber},
-            wboraddress     => $borr->{'address'},
-            wboraddress2    => $borr->{'address2'},
-            wborcity        => $borr->{'city'},
-            wborzip         => $borr->{'zipcode'},
+            streetnumber    => $borr->{streetnumber},
+            streettype      => $borr->{streettype},
+            address         => $borr->{'address'},
+            address2        => $borr->{'address2'},
+            city            => $borr->{'city'},
+            zipcode         => $borr->{'zipcode'},
+            state           => $borr->{'state'},
+            country         => $borr->{'country'},
             wborrowernumber => $reserve->{'borrowernumber'},
             wborcnum        => $borr->{'cardnumber'},
             wtransfertFrom  => $userenv_branch,
@@ -455,11 +461,14 @@ if ( $messages->{'ResFound'}) {
             bortitle       => $borr->{'title'},
             borphone       => $borr->{'phone'},
             boremail       => $borr->{'email'},
-            boraddress     => $borr->{'address'},
-            boraddress2    => $borr->{'address2'},
-            borstnum       => $borr->{streetnumber},
-            borcity        => $borr->{'city'},
-            borzip         => $borr->{'zipcode'},
+            streetnumber   => $borr->{streetnumber},
+            streettype     => $borr->{streettype},
+            address        => $borr->{'address'},
+            address2       => $borr->{'address2'},
+            city           => $borr->{'city'},
+            zipcode        => $borr->{'zipcode'},
+            state          => $borr->{'state'},
+            country        => $borr->{'country'},
             borcnum        => $borr->{'cardnumber'},
             debarred       => $borr->{'debarred'},
             gonenoaddress  => $borr->{'gonenoaddress'},

@@ -383,7 +383,7 @@ if (@$barcodes) {
             #  Get the item title for more information
             my $materials = $iteminfo->{'materials'};
             my $descriptions = Koha::AuthorisedValues->get_description_by_koha_field({ frameworkcode => $getmessageiteminfo->{frameworkcode}, kohafield => 'items.materials', authorised_value => $materials });
-            $materials = $descriptions->{lib} // '';
+            $materials = $descriptions->{lib} // $materials;
             $template_params->{additional_materials} = $materials;
             $template_params->{itemhomebranch} = $iteminfo->{'homebranch'};
 
@@ -636,7 +636,6 @@ $template->param(
     AudioAlerts           => C4::Context->preference("AudioAlerts"),
     fast_cataloging   => $fast_cataloging,
     CircAutoPrintQuickSlip   => C4::Context->preference("CircAutoPrintQuickSlip"),
-    activeBorrowerRelationship => (C4::Context->preference('borrowerRelationship') ne ''),
     SuspendHoldsIntranet => C4::Context->preference('SuspendHoldsIntranet'),
     AutoResumeSuspendedHolds => C4::Context->preference('AutoResumeSuspendedHolds'),
     RoutingSerials => C4::Context->preference('RoutingSerials'),

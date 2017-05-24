@@ -17,7 +17,7 @@
 
 use Modern::Perl;
 
-use Test::More tests => 94;
+use Test::More tests => 95;
 
 use DateTime;
 
@@ -58,6 +58,7 @@ my $itemtype = $builder->build(
         value  => { notforloan => undef, rentalcharge => 0 }
     }
 )->{itemtype};
+my $patron_category = $builder->build({ source => 'Category', value => { enrolmentfee => 0 } });
 
 my $CircControl = C4::Context->preference('CircControl');
 my $HomeOrHoldingBranch = C4::Context->preference('HomeOrHoldingBranch');
@@ -190,7 +191,7 @@ my $sth = C4::Context->dbh->prepare("SELECT COUNT(*) FROM accountlines WHERE amo
 $sth->execute();
 my ( $original_count ) = $sth->fetchrow_array();
 
-C4::Context->dbh->do("INSERT INTO borrowers ( cardnumber, surname, firstname, categorycode, branchcode ) VALUES ( '99999999999', 'Hall', 'Kyle', 'S', ? )", undef, $library2->{branchcode} );
+C4::Context->dbh->do("INSERT INTO borrowers ( cardnumber, surname, firstname, categorycode, branchcode ) VALUES ( '99999999999', 'Hall', 'Kyle', ?, ? )", undef, $patron_category->{categorycode}, $library2->{branchcode} );
 
 C4::Circulation::ProcessOfflinePayment({ cardnumber => '99999999999', amount => '123.45' });
 
@@ -260,28 +261,28 @@ C4::Context->dbh->do("DELETE FROM accountlines");
     my %renewing_borrower_data = (
         firstname =>  'John',
         surname => 'Renewal',
-        categorycode => 'S',
+        categorycode => $patron_category->{categorycode},
         branchcode => $branch,
     );
 
     my %reserving_borrower_data = (
         firstname =>  'Katrin',
         surname => 'Reservation',
-        categorycode => 'S',
+        categorycode => $patron_category->{categorycode},
         branchcode => $branch,
     );
 
     my %hold_waiting_borrower_data = (
         firstname =>  'Kyle',
         surname => 'Reservation',
-        categorycode => 'S',
+        categorycode => $patron_category->{categorycode},
         branchcode => $branch,
     );
 
     my %restricted_borrower_data = (
         firstname =>  'Alice',
         surname => 'Reservation',
-        categorycode => 'S',
+        categorycode => $patron_category->{categorycode},
         debarred => '3228-01-01',
         branchcode => $branch,
     );
@@ -578,7 +579,7 @@ C4::Context->dbh->do("DELETE FROM accountlines");
     );
 
     subtest "too_late_renewal / no_auto_renewal_after" => sub {
-        plan tests => 8;
+        plan tests => 14;
         my $item_to_auto_renew = $builder->build(
             {   source => 'Item',
                 value  => {
@@ -616,10 +617,68 @@ C4::Context->dbh->do("DELETE FROM accountlines");
           CanBookBeRenewed( $renewing_borrowernumber, $item_to_auto_renew->{itemnumber} );
         is( $renewokay, 0,            'Do not renew, renewal is automatic' );
         is( $error,     'auto_renew', 'Cannot renew, renew is automatic' );
+
+        $dbh->do('UPDATE issuingrules SET norenewalbefore = 7, no_auto_renewal_after = NULL, no_auto_renewal_after_hard_limit = ?', undef, dt_from_string->add( days => -1 ) );
+        ( $renewokay, $error ) =
+          CanBookBeRenewed( $renewing_borrowernumber, $item_to_auto_renew->{itemnumber} );
+        is( $renewokay, 0, 'Do not renew, renewal is automatic' );
+        is( $error, 'auto_too_late', 'Cannot renew, too late(returned code is auto_too_late)' );
+
+        $dbh->do('UPDATE issuingrules SET norenewalbefore = 7, no_auto_renewal_after = 15, no_auto_renewal_after_hard_limit = ?', undef, dt_from_string->add( days => -1 ) );
+        ( $renewokay, $error ) =
+          CanBookBeRenewed( $renewing_borrowernumber, $item_to_auto_renew->{itemnumber} );
+        is( $renewokay, 0, 'Do not renew, renewal is automatic' );
+        is( $error, 'auto_too_late', 'Cannot renew, too late(returned code is auto_too_late)' );
+
+        $dbh->do('UPDATE issuingrules SET norenewalbefore = 10, no_auto_renewal_after = NULL, no_auto_renewal_after_hard_limit = ?', undef, dt_from_string->add( days => 1 ) );
+        ( $renewokay, $error ) =
+          CanBookBeRenewed( $renewing_borrowernumber, $item_to_auto_renew->{itemnumber} );
+        is( $renewokay, 0, 'Do not renew, renewal is automatic' );
+        is( $error, 'auto_renew', 'Cannot renew, renew is automatic' );
+    };
+
+    subtest "auto_too_much_oweing | OPACFineNoRenewalsBlockAutoRenew" => sub {
+        plan tests => 6;
+        my $item_to_auto_renew = $builder->build({
+            source => 'Item',
+            value => {
+                biblionumber => $biblionumber,
+                homebranch       => $branch,
+                holdingbranch    => $branch,
+            }
+        });
+
+        my $ten_days_before = dt_from_string->add( days => -10 );
+        my $ten_days_ahead = dt_from_string->add( days => 10 );
+        AddIssue( $renewing_borrower, $item_to_auto_renew->{barcode}, $ten_days_ahead, undef, $ten_days_before, undef, { auto_renew => 1 } );
+
+        $dbh->do('UPDATE issuingrules SET norenewalbefore = 10, no_auto_renewal_after = 11');
+        C4::Context->set_preference('OPACFineNoRenewalsBlockAutoRenew','1');
+        C4::Context->set_preference('OPACFineNoRenewals','10');
+        my $fines_amount = 5;
+        C4::Accounts::manualinvoice( $renewing_borrowernumber, $item_to_auto_renew->{itemnumber}, "Some fines", 'F', $fines_amount );
+        ( $renewokay, $error ) =
+          CanBookBeRenewed( $renewing_borrowernumber, $item_to_auto_renew->{itemnumber} );
+        is( $renewokay, 0, 'Do not renew, renewal is automatic' );
+        is( $error, 'auto_renew', 'Can auto renew, OPACFineNoRenewals=10, patron has 5' );
+
+        C4::Accounts::manualinvoice( $renewing_borrowernumber, $item_to_auto_renew->{itemnumber}, "Some fines", 'F', $fines_amount );
+        ( $renewokay, $error ) =
+          CanBookBeRenewed( $renewing_borrowernumber, $item_to_auto_renew->{itemnumber} );
+        is( $renewokay, 0, 'Do not renew, renewal is automatic' );
+        is( $error, 'auto_renew', 'Can auto renew, OPACFineNoRenewals=10, patron has 10' );
+
+        C4::Accounts::manualinvoice( $renewing_borrowernumber, $item_to_auto_renew->{itemnumber}, "Some fines", 'F', $fines_amount );
+        ( $renewokay, $error ) =
+          CanBookBeRenewed( $renewing_borrowernumber, $item_to_auto_renew->{itemnumber} );
+        is( $renewokay, 0, 'Do not renew, renewal is automatic' );
+        is( $error, 'auto_too_much_oweing', 'Cannot auto renew, OPACFineNoRenewals=10, patron has 15' );
+
+        $dbh->do('DELETE FROM accountlines WHERE borrowernumber=?', undef, $renewing_borrowernumber);
     };
 
     subtest "GetLatestAutoRenewDate" => sub {
-        plan tests => 3;
+        plan tests => 5;
         my $item_to_auto_renew = $builder->build(
             {   source => 'Item',
                 value  => {
@@ -633,23 +692,37 @@ C4::Context->dbh->do("DELETE FROM accountlines");
         my $ten_days_before = dt_from_string->add( days => -10 );
         my $ten_days_ahead  = dt_from_string->add( days => 10 );
         AddIssue( $renewing_borrower, $item_to_auto_renew->{barcode}, $ten_days_ahead, undef, $ten_days_before, undef, { auto_renew => 1 } );
-        $dbh->do('UPDATE issuingrules SET norenewalbefore = 7, no_auto_renewal_after = ""');
+        $dbh->do('UPDATE issuingrules SET norenewalbefore = 7, no_auto_renewal_after = "", no_auto_renewal_after_hard_limit = NULL');
         my $latest_auto_renew_date = GetLatestAutoRenewDate( $renewing_borrowernumber, $item_to_auto_renew->{itemnumber} );
-        is( $latest_auto_renew_date, undef, 'GetLatestAutoRenewDate should return undef if no_auto_renewal_after is not defined' );
+        is( $latest_auto_renew_date, undef, 'GetLatestAutoRenewDate should return undef if no_auto_renewal_after or no_auto_renewal_after_hard_limit are not defined' );
         my $five_days_before = dt_from_string->add( days => -5 );
-        $dbh->do('UPDATE issuingrules SET norenewalbefore = 10, no_auto_renewal_after = 5');
+        $dbh->do('UPDATE issuingrules SET norenewalbefore = 10, no_auto_renewal_after = 5, no_auto_renewal_after_hard_limit = NULL');
         $latest_auto_renew_date = GetLatestAutoRenewDate( $renewing_borrowernumber, $item_to_auto_renew->{itemnumber} );
         is( $latest_auto_renew_date->truncate( to => 'minute' ),
             $five_days_before->truncate( to => 'minute' ),
             'GetLatestAutoRenewDate should return -5 days if no_auto_renewal_after = 5 and date_due is 10 days before'
         );
         my $five_days_ahead = dt_from_string->add( days => 5 );
-        $dbh->do('UPDATE issuingrules SET norenewalbefore = 10, no_auto_renewal_after = 15');
+        $dbh->do('UPDATE issuingrules SET norenewalbefore = 10, no_auto_renewal_after = 15, no_auto_renewal_after_hard_limit = NULL');
         $latest_auto_renew_date = GetLatestAutoRenewDate( $renewing_borrowernumber, $item_to_auto_renew->{itemnumber} );
         is( $latest_auto_renew_date->truncate( to => 'minute' ),
             $five_days_ahead->truncate( to => 'minute' ),
             'GetLatestAutoRenewDate should return +5 days if no_auto_renewal_after = 15 and date_due is 10 days before'
         );
+        my $two_days_ahead = dt_from_string->add( days => 2 );
+        $dbh->do('UPDATE issuingrules SET norenewalbefore = 10, no_auto_renewal_after = "", no_auto_renewal_after_hard_limit = ?', undef, dt_from_string->add( days => 2 ) );
+        $latest_auto_renew_date = GetLatestAutoRenewDate( $renewing_borrowernumber, $item_to_auto_renew->{itemnumber} );
+        is( $latest_auto_renew_date->truncate( to => 'day' ),
+            $two_days_ahead->truncate( to => 'day' ),
+            'GetLatestAutoRenewDate should return +2 days if no_auto_renewal_after_hard_limit is defined and not no_auto_renewal_after'
+        );
+        $dbh->do('UPDATE issuingrules SET norenewalbefore = 10, no_auto_renewal_after = 15, no_auto_renewal_after_hard_limit = ?', undef, dt_from_string->add( days => 2 ) );
+        $latest_auto_renew_date = GetLatestAutoRenewDate( $renewing_borrowernumber, $item_to_auto_renew->{itemnumber} );
+        is( $latest_auto_renew_date->truncate( to => 'day' ),
+            $two_days_ahead->truncate( to => 'day' ),
+            'GetLatestAutoRenewDate should return +2 days if no_auto_renewal_after_hard_limit is < no_auto_renewal_after'
+        );
+
     };
 
     # Too many renewals
@@ -761,7 +834,7 @@ C4::Context->dbh->do("DELETE FROM accountlines");
     my %a_borrower_data = (
         firstname =>  'Fridolyn',
         surname => 'SOMERS',
-        categorycode => 'S',
+        categorycode => $patron_category->{categorycode},
         branchcode => $branch,
     );
 
@@ -841,7 +914,7 @@ C4::Context->dbh->do("DELETE FROM accountlines");
     my %a_borrower_data = (
         firstname =>  'Kyle',
         surname => 'Hall',
-        categorycode => 'S',
+        categorycode => $patron_category->{categorycode},
         branchcode => $branch,
     );
 
@@ -907,13 +980,13 @@ C4::Context->dbh->do("DELETE FROM accountlines");
     my $borrowernumber1 = AddMember(
         firstname    => 'Kyle',
         surname      => 'Hall',
-        categorycode => 'S',
+        categorycode => $patron_category->{categorycode},
         branchcode   => $library2->{branchcode},
     );
     my $borrowernumber2 = AddMember(
         firstname    => 'Chelsea',
         surname      => 'Hall',
-        categorycode => 'S',
+        categorycode => $patron_category->{categorycode},
         branchcode   => $library2->{branchcode},
     );
 
@@ -984,7 +1057,7 @@ C4::Context->dbh->do("DELETE FROM accountlines");
     my $borrowernumber = AddMember(
         firstname =>  'fn',
         surname => 'dn',
-        categorycode => 'S',
+        categorycode => $patron_category->{categorycode},
         branchcode => $branch,
     );
 
@@ -1234,7 +1307,7 @@ subtest 'CanBookBeIssued + Koha::Patron->is_debarred|has_overdues' => sub {
 
     my ( $error, $question, $alerts );
 
-    # Patron cannot issue item_1, he has overdues
+    # Patron cannot issue item_1, they have overdues
     my $yesterday = DateTime->today( time_zone => C4::Context->tz() )->add( days => -1 );
     my $issue = AddIssue( $patron, $item_1->{barcode}, $yesterday );    # Add an overdue
 
@@ -1248,7 +1321,7 @@ subtest 'CanBookBeIssued + Koha::Patron->is_debarred|has_overdues' => sub {
     is( keys(%$question) + keys(%$alerts), 0 );
     is( $error->{USERBLOCKEDOVERDUE},      1 );
 
-    # Patron cannot issue item_1, he is debarred
+    # Patron cannot issue item_1, they are debarred
     my $tomorrow = DateTime->today( time_zone => C4::Context->tz() )->add( days => 1 );
     Koha::Patron::Debarments::AddDebarment( { borrowernumber => $patron->{borrowernumber}, expiration => $tomorrow } );
     ( $error, $question, $alerts ) = CanBookBeIssued( $patron, $item_2->{barcode} );
@@ -1310,7 +1383,7 @@ subtest 'MultipleReserves' => sub {
     my %renewing_borrower_data = (
         firstname =>  'John',
         surname => 'Renewal',
-        categorycode => 'S',
+        categorycode => $patron_category->{categorycode},
         branchcode => $branch,
     );
     my $renewing_borrowernumber = AddMember(%renewing_borrower_data);
@@ -1323,7 +1396,7 @@ subtest 'MultipleReserves' => sub {
     my %reserving_borrower_data1 = (
         firstname =>  'Katrin',
         surname => 'Reservation',
-        categorycode => 'S',
+        categorycode => $patron_category->{categorycode},
         branchcode => $branch,
     );
     my $reserving_borrowernumber1 = AddMember(%reserving_borrower_data1);
@@ -1336,7 +1409,7 @@ subtest 'MultipleReserves' => sub {
     my %reserving_borrower_data2 = (
         firstname =>  'Kirk',
         surname => 'Reservation',
-        categorycode => 'S',
+        categorycode => $patron_category->{categorycode},
         branchcode => $branch,
     );
     my $reserving_borrowernumber2 = AddMember(%reserving_borrower_data2);
@@ -1478,7 +1551,7 @@ subtest 'AddReturn + CumulativeRestrictionPeriods' => sub {
     );
     $rule->store();
 
-    # Patron cannot issue item_1, he has overdues
+    # Patron cannot issue item_1, they have overdues
     my $five_days_ago = dt_from_string->subtract( days => 5 );
     my $ten_days_ago  = dt_from_string->subtract( days => 10 );
     AddIssue( $patron, $item_1->{barcode}, $five_days_ago );    # Add an overdue

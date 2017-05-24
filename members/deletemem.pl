@@ -110,6 +110,8 @@ if ( $op eq 'delete_confirm' or $countissues > 0 or $flags->{'CHARGES'}  or $is_
     my $patron_image = Koha::Patron::Images->find($bor->{borrowernumber});
     $template->param( picture => 1 ) if $patron_image;
 
+    $template->param( adultborrower => 1 ) if ( $bor->{category_type} eq 'A' || $bor->{category_type} eq 'I' );
+
     $template->param(borrowernumber => $member,
         surname => $bor->{'surname'},
         title => $bor->{'title'},
@@ -126,7 +128,6 @@ if ( $op eq 'delete_confirm' or $countissues > 0 or $flags->{'CHARGES'}  or $is_
         phone => $bor->{'phone'},
         email => $bor->{'email'},
         branchcode => $bor->{'branchcode'},
-		activeBorrowerRelationship => (C4::Context->preference('borrowerRelationship') ne ''),
         RoutingSerials => C4::Context->preference('RoutingSerials'),
     );
     if ($countissues >0) {

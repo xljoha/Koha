@@ -324,7 +324,6 @@ sub SetMarcUnicodeFlag {
     my $marc_record = shift;
     my $marc_flavour = shift; # || C4::Context->preference("marcflavour");
 
-    $marc_record->encoding('UTF-8');
     if ($marc_flavour eq 'MARC21' || $marc_flavour eq 'NORMARC') {
         my $leader = $marc_record->leader();
         substr($leader, 9, 1) = 'a';
@@ -763,7 +762,7 @@ where the eight bit is set) octet with the Unicode
 replacement character.  This is meant as a last-ditch
 method, and would be best used as part of a UI that
 lets a cataloguer pick various character conversions
-until he or she finds the right one.
+until they find the right one.
 
 =cut
 

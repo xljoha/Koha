@@ -105,7 +105,7 @@ if ( $bor->{'category_type'} eq 'C') {
     $template->param( 'catcode' => $patron_categories->next )  if $patron_categories->count == 1;
 }
 
-$template->param( adultborrower => 1 ) if ( $bor->{'category_type'} eq 'A' );
+$template->param( adultborrower => 1 ) if ( $bor->{'category_type'} eq 'A' || $bor->{'category_type'} eq 'I' );
 
 my $patron_image = Koha::Patron::Images->find($bor->{borrowernumber});
 $template->param( picture => 1 ) if $patron_image;
@@ -136,6 +136,7 @@ $template->param(
     country                    => $bor->{'country'},
     phone                      => $bor->{'phone'},
     phonepro                   => $bor->{'phonepro'},
+    streetnumber               => $bor->{'streetnumber'},
     mobile                     => $bor->{'mobile'},
     email                      => $bor->{'email'},
     emailpro                   => $bor->{'emailpro'},
@@ -143,7 +144,6 @@ $template->param(
     userid                     => $bor->{'userid'},
     destination                => $destination,
     is_child                   => ( $bor->{'category_type'} eq 'C' ),
-    activeBorrowerRelationship => ( C4::Context->preference('borrowerRelationship') ne '' ),
     minPasswordLength          => $minpw,
     RoutingSerials             => C4::Context->preference('RoutingSerials'),
     csrf_token                 => Koha::Token->new->generate_csrf({ session_id => scalar $input->cookie('CGISESSID'), }),

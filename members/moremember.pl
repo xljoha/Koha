@@ -63,6 +63,7 @@ if ( C4::Context->preference('NorwegianPatronDBEnable') && C4::Context->preferen
 use DateTime;
 use Koha::DateUtils;
 use Koha::Database;
+use Koha::Patrons;
 use Koha::Patron::Categories;
 use Koha::Token;
 
@@ -154,7 +155,11 @@ for (qw(gonenoaddress lost borrowernotes)) {
 }
 
 if ( $patron->is_debarred ) {
-    $template->param( 'userdebarred' => 1, 'flagged' => 1 );
+    $template->param(
+        userdebarred => 1,
+        flagged => 1,
+        debarments => GetDebarments({ borrowernumber => $borrowernumber }),
+    );
     my $debar = $data->{'debarred'};
     if ( $debar ne "9999-12-31" ) {
         $template->param( 'userdebarreddate' => output_pref( { dt => dt_from_string( $debar ), dateonly => 1 } ) );
@@ -328,10 +333,18 @@ if ( C4::Context->preference("ExportCircHistory") ) {
     $template->param(csv_profiles => [ Koha::CsvProfiles->search({ type => 'marc' }) ]);
 }
 
-# in template <TMPL_IF name="I"> => instutitional (A for Adult, C for children)
+# in template <TMPL_IF name="I"> => institutional (A for Adult, C for children)
 $template->param( $data->{'categorycode'} => 1 );
+
+# Display the language description instead of the code
+# Note that this is certainly wrong
+my ( $subtag, $region ) = split '-', $patron->lang;
+my $translated_language = C4::Languages::language_get_description( $subtag, $subtag, 'language' );
+
 $template->param(
     patron          => $patron,
+    borrower        => $patron, # TODO Still needed by includes,
+    translated_language => $translated_language,
     detailview      => 1,
     borrowernumber  => $borrowernumber,
     othernames      => $data->{'othernames'},
@@ -342,17 +355,15 @@ $template->param(
     totaldue        => sprintf("%.2f", $total),
     totaldue_raw    => $total,
     overdues_exist  => $overdues_exist,
-    StaffMember     => ($category_type eq 'S'),
-    is_child        => ($category_type eq 'C'),
+    StaffMember     => $category_type eq 'S',
+    is_child        => $category_type eq 'C',
     samebranch      => $samebranch,
     quickslip       => $quickslip,
-    housebound_role => $patron->housebound_role,
+    housebound_role => scalar $patron->housebound_role,
     privacy_guarantor_checkouts => $data->{'privacy_guarantor_checkouts'},
-    activeBorrowerRelationship => (C4::Context->preference('borrowerRelationship') ne ''),
     AutoResumeSuspendedHolds => C4::Context->preference('AutoResumeSuspendedHolds'),
     SuspendHoldsIntranet => C4::Context->preference('SuspendHoldsIntranet'),
     RoutingSerials => C4::Context->preference('RoutingSerials'),
-    debarments => GetDebarments({ borrowernumber => $borrowernumber }),
     PatronsPerPage => C4::Context->preference("PatronsPerPage") || 20,
     relatives_issues_count => $relatives_issues_count,
     relatives_borrowernumbers => \@relatives,
