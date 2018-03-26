@@ -157,6 +157,7 @@
                             [% END %]
                         </fieldset>
 
+
                         <fieldset class="action">
                           <input type="submit" value="Submit changes" class="btn" /> <a class="cancel" href="/cgi-bin/koha/opac-user.pl">Cancel</a>
                         </fieldset>
@@ -171,9 +172,9 @@
                                 <table class="table table-bordered table-condensed table-striped">
                                     <tr>
                                         <th>&nbsp;</th>
-                                        [% IF ( SMSSendDriver ) %]<th>SMS</th>[% END %]
-                                        <th>Email</th>
-                                        [% IF ( SMSSendDriver ) %]<th>Email and SMS</th>[% END %]
+                                        [% IF ( SMSSendDriver ) %]<th class="gub-heading-messaging-sms">SMS</th>[% END %]
+                                        <th class="gub-heading-messaging-email">Email</th>
+                                        [% IF ( SMSSendDriver ) %]<th class="gub-heading-messaging-sms-and-email">Email and SMS</th>[% END %]
                                     </tr>
                                     [% FOREACH messaging_preference IN messaging_preferences %]
                                         [% IF ( messaging_preference.Advance_Notice ) %]
@@ -188,7 +189,7 @@
                                                 <td>Reminders and notifications</td>
                                                 [% IF ( messaging_preference.transport_sms ) %]
                                                     [% IF ( SMSSendDriver ) %]
-                                                        <td>
+                                                        <td class="gub-messaging-sms">
                                                             [% IF ( messaging_preference.transports_sms ) %]
                                                                 <label class="radio">
                                                                   <input type="radio" name="opacmessaging-simple-radios" id="optionSMS" value="sms" checked>
@@ -204,7 +205,7 @@
                                                     [% END %]
                                                 [% END %]
                                                 [% IF ( messaging_preference.transport_email ) %]
-                                                    <td>
+                                                    <td class="gub-messaging-email">
                                                         [% IF ( messaging_preference.transports_email ) %]
                                                             <label class="radio">
                                                               <input type="radio" name="opacmessaging-simple-radios" id="optionEMAIL" value="email" checked >
@@ -223,7 +224,7 @@
 
                                                 [% IF ( messaging_preference.transport_sms ) %]
                                                     [% IF ( SMSSendDriver ) %]
-                                                        <td>
+                                                        <td class="gub-messaging-sms-and-email">
                                                             [% IF ( messaging_preference.transports_sms && messaging_preference.transports_email) %]
                                                                 <label class="radio">
                                                                   <input type="radio" name="opacmessaging-simple-radios" id="optionSmsAndEmail" value="SmsAndEmail" checked>
@@ -242,30 +243,25 @@
                                         [% END %]
                                     [% END # / FOREACH messaging_preferences%]
                             </table>
+
                             <fieldset class="rows">
                                 [% IF ( SMSSendDriver ) %]
-                                    <ol><li><label>Notice:</label>Some charges for text messages may be incurred when using this service. Please check with your mobile service provider if you have questions.</li></ol>
-                                    <ol><li>
-                                        <label for="SMSnumber">SMS number:</label> <input type="text" id="SMSnumber" name="SMSnumber" value="[% SMSnumber %]" />
-                                        <i>Please enter numbers only. <b>(123) 456-7890</b> would be entered as <b>1234567890</b>.</i>
-                                    </li></ol>
-                                [% END %]
-
-                                [% IF ( SMSSendDriver == 'Email' ) %]
-                                    <ol><li>
-                                        <label for="sms_provider_id">SMS provider:</label>
-                                        <select id="sms_provider_id" name="sms_provider_id"/>
-                                            <option value="">Unknown</option>
-                                            [% FOREACH s IN sms_providers %]
-                                                [% IF s.id == sms_provider_id %]
-                                                    <option value="[% s.id %]" selected="selected">[% s.name %]</option>
-                                                [% ELSE %]
-                                                    <option value="[% s.id %]">[% s.name %]</option>
-                                                [% END %]
+                                    <ol>
+                                        <li>
+                                            [% IF (email) %]
+                                                <span class="gub-email-info"><strong>Email: </strong> [% email %] <a href="/cgi-bin/koha/opac-memberentry.pl#contact_legend"><i class="icon-edit"></i></a></span>
+                                            [% ELSE %]
+                                                <span class="gub-no-email-info">You have not yet registered an email address.</span> <a href="/cgi-bin/koha/opac-memberentry.pl#contact_legend">Click here to add email.</a>
                                             [% END %]
-                                        </select>
-                                        <i>Please contact a library staff member if you are unsure of your mobile service provider, or you do not see your provider in this list.</i>
-                                    </li></ol>
+                                        </li>
+                                        <li>
+                                            [% IF (SMSnumber) %]
+                                                <span class="gub-sms-info"><strong>Mobile/SMS: </strong> [% SMSnumber %]<a href="/cgi-bin/koha/opac-memberentry.pl#contact_legend"><i class="icon-edit"></i></span>
+                                            [% ELSE %]
+                                                <span class="gub-no-sms-info">You have not yet registered a mobile/sms number.</span> <a href="/cgi-bin/koha/opac-memberentry.pl#contact_legend">Click here to add number. </a>
+                                            [% END %]
+                                        </li>
+                                    </ol>
                                 [% END %]
                             </fieldset>
 
