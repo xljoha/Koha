@@ -9,7 +9,6 @@
 
 $(document).ready(function() {
 
-
   shortcut.add('F1', function() {
     location.href = '/cgi-bin/koha/catalogue/search.pl';
   });
@@ -152,13 +151,33 @@ $(document).ready(function() {
 
     // Trigger on page load
     checkAccountTypeHandler();
+
+
   }
 
+  // redirect help to GU manuals
+  // set correct href
+  $('a#helper').attr('href', 'https://medarbetarportalen.gu.se/internwebb-ub/projekt-och-forandringar/nys/utbildningar-i-koha/');
+  // remove default behaviour
+  $('a#helper').off('click');
+  // open in blank window
+  $('a#helper').attr('target', '_blank');
+
+
+  // check if return btn is visible
+  setTimeout(function() {
+    if ($('#circ_returns.circ.modal-open .btn.approve.gub-set-focus').is(':visible')) {
+      $('.btn.approve').focus();
+    }
+  }, 300);
+
+
   // Keep search term after search
+
   let val = getQueryVariable('q');
   if (val.length > 0) {
     if (!getQueryVariable('idx')) {
-      $('#search-form').val(val);
+      $('#search-form').val(decodeURIComponent(val.replace(/\+/g, ' ')));
     }
   }
 
