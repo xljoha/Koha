@@ -146,8 +146,10 @@
                             [% IF ( shibbolethAuthentication ) %]
                                 <p>Nothing</p>
                             [% ELSE %]
-                                <h4>Log in with library account</h4>
-                                <p>For users without a GU account.</p>
+                                <span class="gub-libary-account-login">
+                                    <h4>Log in with library account</h4>
+                                    <p>For users without a GU account.</p>
+                                </span>
                             [% END %]
 
                         [% END # / IF casAuthentication %]
