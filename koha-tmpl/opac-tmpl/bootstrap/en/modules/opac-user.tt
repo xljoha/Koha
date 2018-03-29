@@ -121,7 +121,7 @@ Using this account is not recommended because some parts of Koha will not functi
                               [% END %]
                             [% END %]
                           </ul>
-                          <span class=""><a href="http://www.ub.gu.se/kontakta/"> Contact the library</a> if you have any questions.</span>
+                          <span class="restriction-question"><a href="http://www.ub.gu.se/kontakta/"> Contact the library</a> if you have any questions.</span>
                         </div>
                       [% END %]
                     [% ELSE %]    
